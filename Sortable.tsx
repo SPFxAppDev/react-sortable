@@ -4,7 +4,7 @@ export enum SharedListMode {
     Move,
     Clone,
     None,
-    Custom
+    Custom,
 }
 
 export interface ISortableSharedListProps {
@@ -15,8 +15,9 @@ export interface ISortableSharedListProps {
 export interface ISortableProps {
     tag?: string;
     sort?: boolean;
+    handle?: string;
     //TODO: Make this as array for handling from source to target list
-    sharedListProps?: ISortableSharedListProps;
+    sharedListProps?: ISortableSharedListProps[];
     onDragEnd?(event: any, draggedItem: Element, targedItem?: Element): void;
     items?: any[];
     onChange?(
@@ -29,7 +30,7 @@ export interface ISortableProps {
 
 interface ISharedData {
     index: number;
-    sharedListProps?: ISortableSharedListProps;
+    sharedListProps?: ISortableSharedListProps[];
     item?: any;
     items?: any;
 }
@@ -52,13 +53,15 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         newItemIndex?: number
     ): void;
 
+    private static currentSharedData?: ISharedData = undefined;
+
     private lastMousePosition = { x: null, y: null };
 
     private mouseMovesDown: boolean = false;
 
     public static defaultProps: Partial<ISortableProps> = {
         tag: "div",
-        sort: true
+        sort: true,
     };
 
     private get items(): Element[] {
@@ -93,6 +96,9 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     public componentDidUpdate(prevProps, prevState): void {
         setTimeout(() => {
+            if (this.arraysAreEqual(prevProps.items, this.props.items)) {
+                return;
+            }
             Array.from(this.containerRef.current.children as Element[]).forEach(
                 (item: Element): void => {
                     this.removeEvents(item);
@@ -108,6 +114,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         if (!item.getAttribute("draggable")) {
             item.setAttribute("draggable", "true");
         }
+
         item.addEventListener("dragstart", this.onItemDragStart);
         item.addEventListener("drop", this.onItemDropped);
         item.addEventListener("dragenter", this.onItemDragEnter);
@@ -118,11 +125,11 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     private removeEvents(item: Element): void {
         item.removeEventListener("dragstart", this.onItemDragStart);
-        item.addEventListener("drop", this.onItemDropped);
-        item.addEventListener("dragenter", this.onItemDragEnter);
-        item.addEventListener("dragleave", this.onItemDragleave);
-        item.addEventListener("dragover", this.onItemDragOver);
-        item.addEventListener("dragend", this.onItemDragEnd);
+        item.removeEventListener("drop", this.onItemDropped);
+        item.removeEventListener("dragenter", this.onItemDragEnter);
+        item.removeEventListener("dragleave", this.onItemDragleave);
+        item.removeEventListener("dragover", this.onItemDragOver);
+        item.removeEventListener("dragend", this.onItemDragEnd);
     }
 
     public render(): JSX.Element {
@@ -136,6 +143,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         event.dataTransfer.effectAllowed = "copy";
         item.classList.add("dragging");
+
         const sharedData: ISharedData = {
             index: index,
             sharedListProps: this.props.sharedListProps,
@@ -143,12 +151,13 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             item:
                 this.props.items && this.props.items[index]
                     ? this.props.items[index]
-                    : undefined
+                    : undefined,
         };
         event.dataTransfer.setData("text/plain", JSON.stringify(sharedData));
         this.currentDragElement = event.target;
         Sortable.draggedElement = event.target;
         Sortable.sourceOnChangeFunc = this.props.onChange;
+        Sortable.currentSharedData = sharedData;
     }
 
     private onItemDragEnter(event: any): void {
@@ -175,16 +184,25 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             return;
         }
 
+        const currentListProps = this.getFirstOrDefault(
+            originalItemData.sharedListProps,
+            (i) => {
+                return (
+                    i.name ===
+                    this.getFirstOrDefault(
+                        this.props.sharedListProps,
+                        (i2) => i2.name === i.name
+                    )?.name || undefined
+                );
+            }
+        );
+
         const isSameList: boolean = this.containerRef.current.contains(
             this.currentDragElement as Node
         );
 
-        if (
-            !isSameList &&
-            originalItemData.sharedListProps &&
-            originalItemData.sharedListProps.name === this.props.sharedListProps.name
-        ) {
-            this.moveOrCloneToTarget(event, originalItemData);
+        if (!isSameList && currentListProps) {
+            this.moveOrCloneToTarget(event, originalItemData, currentListProps);
             return;
         }
 
@@ -195,11 +213,15 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         this.sortItem(event, originalItemData);
     }
 
-    private moveOrCloneToTarget(event: any, originalItemData: ISharedData): void {
+    private moveOrCloneToTarget(
+        event: any,
+        originalItemData: ISharedData,
+        relevantSharedListData: ISortableSharedListProps
+    ): void {
         const target = this.getRootDraggableElement(event.target);
         // const newIndex = [...this.items].indexOf(target);
 
-        if (originalItemData.sharedListProps?.mode === SharedListMode.None) {
+        if (relevantSharedListData?.mode === SharedListMode.None) {
             return;
         }
 
@@ -212,14 +234,14 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             newIndex += 1;
         }
 
-        if (originalItemData.sharedListProps?.mode === SharedListMode.Custom) {
+        if (relevantSharedListData?.mode === SharedListMode.Custom) {
             this.afterMoveOrClone(originalItemData, newIndex);
             return;
         }
 
         const isOnChangeSet: boolean = typeof this.props.onChange === "function";
 
-        if (originalItemData.sharedListProps?.mode === SharedListMode.Clone) {
+        if (relevantSharedListData?.mode === SharedListMode.Clone) {
             if (!isOnChangeSet) {
                 const clonedItem = Sortable.draggedElement?.cloneNode(true);
                 // const clonedItem = Sortable.draggedElement;
@@ -352,14 +374,46 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         this.setMouseMovePositions(e.clientY, e.clientX);
     }
 
-    private addVisualElementsAndClasses(ebent: any): void {
+    private addVisualElementsAndClasses(event: any): void {
+        this.removeVisualElementsAndClasses();
         if (!this.props.sort) {
             return;
         }
 
-        const target = this.getRootDraggableElement(event.target);
+        if (!Sortable.currentSharedData) {
+            return;
+        }
 
-        this.removeVisualElementsAndClasses();
+        const currentListProps = this.getFirstOrDefault(
+            Sortable.currentSharedData.sharedListProps,
+            (i) => {
+                return (
+                    i.name ===
+                    this.getFirstOrDefault(
+                        this.props.sharedListProps,
+                        (i2) => i2.name === i.name
+                    )?.name || undefined
+                );
+            }
+        );
+
+        const isSameList: boolean = this.containerRef.current.contains(
+            this.currentDragElement as Node
+        );
+
+        if (!isSameList && !currentListProps) {
+            return;
+        }
+
+        if (
+            !isSameList &&
+            (currentListProps?.mode === SharedListMode.None ||
+                currentListProps?.mode === SharedListMode.Custom)
+        ) {
+            return;
+        }
+
+        const target = this.getRootDraggableElement(event.target);
 
         const el = document.createElement(this.props.tag);
         el.classList.add("visual-element");
@@ -448,5 +502,78 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         } while (!target.getAttribute("draggable"));
 
         return target;
+    }
+
+    private getFirstOrDefault<T>(
+        arr: T[],
+        predicateFunc?: (item: T) => boolean,
+        defaultValue: T | null = null
+    ): T | null {
+        if (
+            arr &&
+            typeof arr === "object" &&
+            typeof arr.length === "number" &&
+            arr.length < 1
+        ) {
+            return defaultValue;
+        }
+
+        if (typeof predicateFunc !== "function") {
+            return arr[0];
+        }
+
+        for (let i: number = 0; i < arr.length; i++) {
+            const item: any = arr[i];
+            if (predicateFunc(item)) {
+                return item;
+            }
+        }
+
+        return defaultValue;
+    }
+
+    private deepEqual(obj1: any, obj2: any): boolean {
+        if (obj1 === obj2) {
+            return true;
+        }
+
+        if (
+            typeof obj1 !== "object" ||
+            obj1 === null ||
+            typeof obj2 !== "object" ||
+            obj2 === null
+        ) {
+            return false;
+        }
+
+        const keys1 = Object.keys(obj1);
+        const keys2 = Object.keys(obj2);
+
+        if (keys1.length !== keys2.length) {
+            return false;
+        }
+
+        for (const key of keys1) {
+            if (!keys2.includes(key) || !this.deepEqual(obj1[key], obj2[key])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Function to perform a deep equality check of arrays
+    private arraysAreEqual(array1: any[], array2: any[]): boolean {
+        if (array1.length !== array2.length) {
+            return false;
+        }
+
+        for (let i = 0; i < array1.length; i++) {
+            if (!this.deepEqual(array1[i], array2[i])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
