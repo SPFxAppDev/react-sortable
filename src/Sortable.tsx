@@ -12,14 +12,21 @@ export interface ISortableSharedListProps {
     mode?: SharedListMode;
 }
 
+export interface IVisualizationCssClasses {
+    top: string;
+    bottom: string;
+    target: string;
+}
+
 export interface ISortableProps {
     tag?: string;
+    containerProps?: React.HTMLAttributes<HTMLElement>;
     sort?: boolean;
     handle?: string;
-    //TODO: Make this as array for handling from source to target list
     sharedListProps?: ISortableSharedListProps[];
     onDragEnd?(event: any, draggedItem: Element, targedItem?: Element): void;
     items?: any[];
+    visualizationCssClasses?: Partial<IVisualizationCssClasses>;
     onChange?(
         items: any,
         changedItem?: any,
@@ -38,7 +45,7 @@ interface ISharedData {
 export interface ISortableState { }
 
 export class Sortable extends React.Component<ISortableProps, ISortableState> {
-    private containerRef = createRef();
+    private containerRef = createRef<HTMLElement>();
 
     private eventsRegistered: boolean = false;
 
@@ -55,9 +62,20 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     private static currentSharedData?: ISharedData = undefined;
 
-    private lastMousePosition = { x: null, y: null };
+    private lastMousePosition = { x: 0, y: 0 };
 
     private mouseMovesDown: boolean = false;
+
+    private get visualizationCssClasses(): IVisualizationCssClasses {
+        const defaultCssClasses = {
+            top: "top",
+            bottom: "bottom",
+            target: "target",
+        };
+
+        const customCssProps = this.props.visualizationCssClasses || {};
+        return { ...defaultCssClasses, ...customCssProps };
+    }
 
     public static defaultProps: Partial<ISortableProps> = {
         tag: "div",
@@ -65,8 +83,11 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
     };
 
     private get items(): Element[] {
-        // return Array.from(this.containerRef.current.children);
-        return this.containerRef.current.querySelectorAll("[draggable='true']");
+        const items = (this.containerRef.current as HTMLElement).querySelectorAll(
+            "[draggable='true']"
+        );
+
+        return Array.from<Element>(items);
     }
 
     public constructor(props: ISortableProps) {
@@ -87,32 +108,64 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         this.eventsRegistered = true;
 
-        this.containerRef.current.addEventListener("mousemove", this.onMouseMove);
+        const container = this.containerRef?.current as HTMLElement;
+
+        container.addEventListener("mousemove", this.onMouseMove);
+        const a = container.children[0];
         //This is for initial call only, do not use this.items, because at this time the draggable atttribute is not set
-        Array.from(this.containerRef.current.children as Element[]).forEach((item: Element): void => {
+        Array.from<HTMLElement>(
+            container.children as HTMLCollectionOf<HTMLElement>
+        ).forEach((item: HTMLElement) => {
             this.registerEvents(item);
         });
     }
 
-    public componentDidUpdate(prevProps, prevState): void {
+    public componentDidUpdate(
+        prevProps: ISortableProps,
+        prevState: ISortableState
+    ): void {
         setTimeout(() => {
+            if (!prevProps.items || !this.props.items) {
+                return;
+            }
+
             if (this.arraysAreEqual(prevProps.items, this.props.items)) {
                 return;
             }
-            Array.from(this.containerRef.current.children as Element[]).forEach(
-                (item: Element): void => {
-                    this.removeEvents(item);
-                    this.registerEvents(item);
-                }
-            );
+
+            const container = this.containerRef?.current as HTMLElement;
+
+            Array.from<HTMLElement>(
+                container.children as HTMLCollectionOf<HTMLElement>
+            ).forEach((item: HTMLElement) => {
+                this.removeEvents(item);
+                this.registerEvents(item);
+            });
         }, 150);
     }
 
-    private registerEvents(item: Element): void {
+    private registerEvents(item: HTMLElement): void {
         item.classList.remove("dragging");
+        item.dataset.spfxappdevdraggableroot = "true";
 
-        if (!item.getAttribute("draggable")) {
-            item.setAttribute("draggable", "true");
+        let draggableAttr = item.getAttribute("draggable");
+
+        // if (draggableAttr === "false") {
+        //   return;
+        // }
+
+        const itemOrHandle = this.props.handle
+            ? item.querySelector(this.props.handle)
+            : item;
+
+        if (!itemOrHandle) {
+            return;
+        }
+
+        draggableAttr = itemOrHandle.getAttribute("draggable");
+
+        if (!draggableAttr) {
+            itemOrHandle.setAttribute("draggable", "true");
         }
 
         item.addEventListener("dragstart", this.onItemDragStart);
@@ -123,7 +176,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         item.addEventListener("dragend", this.onItemDragEnd);
     }
 
-    private removeEvents(item: Element): void {
+    private removeEvents(item: HTMLElement): void {
         item.removeEventListener("dragstart", this.onItemDragStart);
         item.removeEventListener("drop", this.onItemDropped);
         item.removeEventListener("dragenter", this.onItemDragEnter);
@@ -134,11 +187,37 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     public render(): JSX.Element {
         const Container: any = this.props.tag;
-        return <Container ref={this.containerRef}>{this.props.children}</Container>;
+        return (
+            <Container {...this.props.containerProps} ref={this.containerRef}>
+                {this.props.children}
+            </Container>
+        );
     }
 
     private onItemDragStart(event: any): void {
         const item = this.getRootDraggableElement(event.target);
+        this.currentDragElement = item as HTMLElement;
+        Sortable.draggedElement = item as HTMLElement;
+        Sortable.sourceOnChangeFunc = this.props.onChange;
+
+        const isHandle =
+            typeof this.props.handle !== "undefined" && this.props.handle !== null;
+
+        if (isHandle) {
+            if (item.getAttribute("draggable") === "false") {
+                return;
+            }
+
+            item.setAttribute("draggable", "true");
+            item
+                .querySelector(this.props.handle as string)
+                ?.setAttribute("draggable", "false");
+        }
+
+        if (item.getAttribute("draggable") === "false") {
+            return;
+        }
+
         const index: number = [...this.items].indexOf(item);
 
         event.dataTransfer.effectAllowed = "copy";
@@ -154,9 +233,6 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
                     : undefined,
         };
         event.dataTransfer.setData("text/plain", JSON.stringify(sharedData));
-        this.currentDragElement = event.target;
-        Sortable.draggedElement = event.target;
-        Sortable.sourceOnChangeFunc = this.props.onChange;
         Sortable.currentSharedData = sharedData;
     }
 
@@ -170,14 +246,27 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         event.preventDefault();
         event.stopPropagation();
 
+        console.log("SSC onItemDropped", Sortable.draggedElement);
+
+        if (
+            Sortable.draggedElement &&
+            Sortable.draggedElement.getAttribute("draggable") === "false"
+        ) {
+            return;
+        }
+
         let target = this.getRootDraggableElement(event.target);
 
         this.removeVisualElementsAndClasses();
-        target.classList.remove("target");
+        target.classList.remove(this.visualizationCssClasses.target);
 
-        const originalItemData: ISharedData = JSON.parse(
-            event.dataTransfer.getData("text/plain")
-        ) as ISharedData;
+        const eventData = event.dataTransfer.getData("text/plain");
+
+        if (!eventData) {
+            return;
+        }
+
+        const originalItemData: ISharedData = JSON.parse(eventData) as ISharedData;
 
         //Do nothing if the "dragged/dropped" element is not in same container
         if (!originalItemData.sharedListProps && !this.currentDragElement) {
@@ -185,21 +274,21 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         }
 
         const currentListProps = this.getFirstOrDefault(
-            originalItemData.sharedListProps,
-            (i) => {
+            originalItemData.sharedListProps as ISortableSharedListProps[],
+            (i: ISortableSharedListProps) => {
                 return (
                     i.name ===
                     this.getFirstOrDefault(
-                        this.props.sharedListProps,
-                        (i2) => i2.name === i.name
-                    )?.name || undefined
+                        this.props.sharedListProps as ISortableSharedListProps[],
+                        (i2: ISortableSharedListProps) => i2.name === i.name
+                    )?.name
                 );
             }
         );
 
-        const isSameList: boolean = this.containerRef.current.contains(
-            this.currentDragElement as Node
-        );
+        const isSameList: boolean = (
+            this.containerRef.current as HTMLElement
+        ).contains(this.currentDragElement as Node);
 
         if (!isSameList && currentListProps) {
             this.moveOrCloneToTarget(event, originalItemData, currentListProps);
@@ -227,7 +316,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         let newIndex = [...this.items].indexOf(target);
 
-        let positionToAdd = "beforebegin";
+        let positionToAdd: InsertPosition = "beforebegin";
 
         if (this.mouseMovesDown) {
             positionToAdd = "afterend";
@@ -243,9 +332,11 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         if (relevantSharedListData?.mode === SharedListMode.Clone) {
             if (!isOnChangeSet) {
-                const clonedItem = Sortable.draggedElement?.cloneNode(true);
+                const clonedItem = (Sortable.draggedElement as HTMLElement).cloneNode(
+                    true
+                ) as HTMLElement;
                 // const clonedItem = Sortable.draggedElement;
-                this.registerEvents(clonedItem as Element);
+                this.registerEvents(clonedItem);
                 target.insertAdjacentElement(positionToAdd, clonedItem);
             }
 
@@ -254,7 +345,10 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         }
 
         if (!isOnChangeSet) {
-            target.insertAdjacentElement(positionToAdd, Sortable.draggedElement);
+            target.insertAdjacentElement(
+                positionToAdd,
+                Sortable.draggedElement as HTMLElement
+            );
         }
 
         if (
@@ -349,8 +443,18 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         const item: Element = this.getRootDraggableElement(event.target);
         item.classList.remove("dragging");
 
+        const isHandle =
+            typeof this.props.handle !== "undefined" && this.props.handle !== null;
+
+        if (isHandle) {
+            item.removeAttribute("draggable");
+            item
+                .querySelector(this.props.handle as string)
+                ?.setAttribute("draggable", "true");
+        }
+
         if (typeof this.props.onDragEnd === "function") {
-            this.props.onDragEnd(event, Sortable.draggedElement);
+            this.props.onDragEnd(event, Sortable.draggedElement as HTMLElement);
         }
 
         this.removeVisualElementsAndClasses();
@@ -359,7 +463,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
     }
 
     private onItemDragleave(event: any): void {
-        event.target.classList.remove("target");
+        event.target.classList.remove(this.visualizationCssClasses.target);
     }
 
     private onItemDragOver(event: any): void {
@@ -385,21 +489,21 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         }
 
         const currentListProps = this.getFirstOrDefault(
-            Sortable.currentSharedData.sharedListProps,
-            (i) => {
+            Sortable.currentSharedData.sharedListProps as ISortableSharedListProps[],
+            (i: ISortableSharedListProps) => {
                 return (
                     i.name ===
                     this.getFirstOrDefault(
-                        this.props.sharedListProps,
-                        (i2) => i2.name === i.name
-                    )?.name || undefined
+                        this.props.sharedListProps as ISortableSharedListProps[],
+                        (i2: ISortableSharedListProps) => i2.name === i.name
+                    )?.name
                 );
             }
         );
 
-        const isSameList: boolean = this.containerRef.current.contains(
-            this.currentDragElement as Node
-        );
+        const isSameList: boolean = (
+            this.containerRef.current as HTMLElement
+        ).contains(this.currentDragElement as Node);
 
         if (!isSameList && !currentListProps) {
             return;
@@ -415,62 +519,41 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         const target = this.getRootDraggableElement(event.target);
 
-        const el = document.createElement(this.props.tag);
-        el.classList.add("visual-element");
-
-        //TODO: Use another classname
-        //TODO: Maybe it is better to set the border top/bottom on target...
         if (!this.mouseMovesDown) {
-            target.classList.remove("bottom");
-            target.classList.add("top");
-            // target.insertAdjacentElement("beforebegin", el);
+            target.classList.remove(this.visualizationCssClasses.bottom);
+            target.classList.add(this.visualizationCssClasses.top);
         } else {
-            // target.insertAdjacentElement("afterend", el);
-            target.classList.add("bottom");
-            target.classList.remove("top");
+            target.classList.add(this.visualizationCssClasses.bottom);
+            target.classList.remove(this.visualizationCssClasses.top);
         }
 
-        // target.insertAdjacentElement("beforebegin", el);
-
-        target.classList.add("target");
+        target.classList.add(this.visualizationCssClasses.target);
     }
 
     private removeVisualElementsAndClasses(): void {
-        // this.containerRef.current
-        //   .querySelectorAll(".visual-element")
-        //   .forEach((el) => {
-        //     el.remove();
-        //   });
-
-        this.containerRef.current
-            .querySelectorAll(".target, .visual-element")
+        const targetSelector: string = `.${this.visualizationCssClasses.target}`;
+        (this.containerRef.current as HTMLElement)
+            .querySelectorAll(targetSelector)
             .forEach((el) => {
-                el.classList.remove("target");
-                el.classList.remove("bottom");
-                el.classList.remove("top");
-                el.classList.remove("visual-element");
+                // el.classList.remove(this.visualizationCssClasses.target);
+                el.classList.remove(this.visualizationCssClasses.bottom);
+                el.classList.remove(this.visualizationCssClasses.top);
             });
 
-        // this.containerRef.current
-        //   .querySelectorAll(".visual-element")
-        //   .forEach((visual) => {
-        //     visual.remove();
-        //   });
+        if (Sortable.draggedElement && Sortable.draggedElement.parentElement) {
+            (Sortable.draggedElement.parentElement as HTMLElement)
+                .querySelectorAll(targetSelector)
+                .forEach((el) => {
+                    // el.classList.remove(this.visualizationCssClasses.target);
+                    el.classList.remove(this.visualizationCssClasses.bottom);
+                    el.classList.remove(this.visualizationCssClasses.top);
+                });
+        }
 
-        Sortable.draggedElement?.parentElement
-            .querySelectorAll(".target, .visual-element")
-            .forEach((el) => {
-                el.classList.remove("target");
-                el.classList.remove("bottom");
-                el.classList.remove("top");
-                el.classList.remove("visual-element");
-            });
-
-        document.querySelectorAll(".target, .visual-element").forEach((el) => {
-            el.classList.remove("target");
-            el.classList.remove("bottom");
-            el.classList.remove("top");
-            el.classList.remove("visual-element");
+        document.querySelectorAll(targetSelector).forEach((el) => {
+            el.classList.remove(this.visualizationCssClasses.bottom);
+            el.classList.remove(this.visualizationCssClasses.top);
+            el.classList.remove(this.visualizationCssClasses.target);
         });
     }
 
@@ -479,27 +562,30 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             return;
         }
 
-        this.mouseMovesDown =
-            y > this.lastMousePosition.y
-                ? true
-                : y < this.lastMousePosition.y
-                    ? false
-                    : false;
+        this.mouseMovesDown = y > this.lastMousePosition.y;
 
         this.lastMousePosition.x = x;
         this.lastMousePosition.y = y;
     }
 
     private getRootDraggableElement(currentTarget: Element): Element {
-        if (currentTarget.getAttribute("draggable")) {
-            return currentTarget;
+        let target: HTMLElement = currentTarget as HTMLElement;
+
+        if (currentTarget instanceof Text) {
+            target = (currentTarget as Text).parentElement as HTMLElement;
         }
 
-        let target = currentTarget;
+        if (target.dataset.spfxappdevdraggableroot) {
+            return target;
+        }
 
         do {
+            if (!target.parentElement) {
+                break;
+            }
+
             target = target.parentElement;
-        } while (!target.getAttribute("draggable"));
+        } while (!target.dataset.spfxappdevdraggableroot);
 
         return target;
     }
@@ -510,10 +596,11 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         defaultValue: T | null = null
     ): T | null {
         if (
-            arr &&
-            typeof arr === "object" &&
-            typeof arr.length === "number" &&
-            arr.length < 1
+            !arr ||
+            (arr &&
+                typeof arr === "object" &&
+                typeof arr.length === "number" &&
+                arr.length < 1)
         ) {
             return defaultValue;
         }
@@ -554,7 +641,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         }
 
         for (const key of keys1) {
-            if (!keys2.includes(key) || !this.deepEqual(obj1[key], obj2[key])) {
+            if (keys2.indexOf(key) < 0 || !this.deepEqual(obj1[key], obj2[key])) {
                 return false;
             }
         }
