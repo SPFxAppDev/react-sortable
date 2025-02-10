@@ -86,15 +86,15 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         this.containerRef.current.addEventListener("mousemove", this.onMouseMove);
         //This is for initial call only, do not use this.items, because at this time the draggable atttribute is not set
-        Array.from(this.containerRef.current.children).forEach((item: Element) => {
+        Array.from(this.containerRef.current.children as Element[]).forEach((item: Element): void => {
             this.registerEvents(item);
         });
     }
 
     public componentDidUpdate(prevProps, prevState): void {
         setTimeout(() => {
-            Array.from(this.containerRef.current.children).forEach(
-                (item: Element) => {
+            Array.from(this.containerRef.current.children as Element[]).forEach(
+                (item: Element): void => {
                     this.removeEvents(item);
                     this.registerEvents(item);
                 }
