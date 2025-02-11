@@ -1,32 +1,147 @@
-import React, { createRef } from "react";
+import * as React from "react";
 
+/**
+ * Defines how Sortable lists interact when items are dragged between them.
+ * The mode of the *target* list is what matters.
+ */
 export enum SharedListMode {
+    /**
+      * Moves the item to the target list.
+     */
     Move,
+
+    /**
+     * Clones/Copies the item to the target list.
+     */
     Clone,
+
+    /**
+     *  No interaction.  The item cannot be moved.
+     */
     None,
+
+    /**
+     * Allows custom logic for the interaction.
+     */
     Custom,
 }
 
+/**
+ *  Properties for interaction between Sortable lists.
+ *  Used in the `sharedListProps` array of a Sortable component.
+ */
 export interface ISortableSharedListProps {
+
+    /**
+    *  The name that identifies which Sortable lists can interact.
+    *  Only lists with the *same* “name” can interact.
+    */
     name: string;
+
+    /**
+     * The interaction mode (Move, Clone, None, Custom).
+     * The `mode` of the *target* list determines what happens.
+     *
+     * @default SharedListMode.Move
+     */
     mode?: SharedListMode;
 }
 
+/**
+ * CSS classes for customizing the visual appearance of the drag-and-drop interaction.
+ */
 export interface IVisualizationCssClasses {
+    /**
+     * CSS class applied to the element above the drop target.
+     * @default 'above-drop-target'
+     */
     top: string;
+
+    /**
+     * CSS class applied to the element below the drop target.
+     * @default 'below-drop-target'
+     */
     bottom: string;
+
+    /**
+     * CSS class applied to the element below the drop target.
+     * @default 'drop-target'
+     */
     target: string;
 }
 
+/**
+ * Properties for the `Sortable` component.
+ */
 export interface ISortableProps {
+    /**
+     * The HTML tag to use for the container element.
+     *
+     * @default 'div'
+     */
     tag?: string;
+
+    /**
+     *  Standard HTML attributes (like `className`, `style`, etc.) to pass to the container element.
+     */
     containerProps?: React.HTMLAttributes<HTMLElement>;
+
+    /**
+     * Whether sorting is enabled within this list.
+     *
+     * @default true
+     */
     sort?: boolean;
+
+    /**
+     * A CSS selector to specify which elements *within* a list item
+     * are used as drag handles.  If not provided, the entire list item is draggable.
+     * The handle *must* be a child element of a list item.
+     * @example: `.my-handle-class` or `button.drag-handle`
+     */
     handle?: string;
+
+    /**
+     *  Defines how this Sortable list interacts with other Sortable lists.
+     * @see ISortableSharedListProps
+     */
     sharedListProps?: ISortableSharedListProps[];
+
+    /**
+    * Optional callback function that is called when a drag operation ends.
+    *
+    * @param event The original drag event.
+    * @param draggedItem The DOM element that was dragged.
+    * @param targetItem The DOM element where the dragged item was dropped (undefined if dropped outside a valid target).
+    */
     onDragEnd?(event: any, draggedItem: Element, targedItem?: Element): void;
+
+    /**
+     *  An array of data items that correspond to the list items in the UI.
+     *  This is primarily used when cloning/moving items between lists.
+     *  It allows the component to keep track of the correct order of items,
+     *  even after they have been cloned/moved.  The items in this array should
+     *  match the structure of your rendered list items.
+     */
     items?: any[];
+
+    /**
+     * Optional CSS classes to customize the visual appearance.
+     * You can provide any or all of the `top`, `bottom`, and `target` classes.
+     * @see IVisualizationCssClasses
+     * @default { top: "above-drop-target", bottom: 'below-drop-target', target: 'drop-target' }
+     */
     visualizationCssClasses?: Partial<IVisualizationCssClasses>;
+
+    /**
+     * Optional callback function called when the order of items changes.
+     * Use this to update your application's state.
+     *
+     * @param items The updated array of items (in the new order).
+     * @param changedItem The item that was moved, cloned, or otherwise changed.
+     * @param oldItemIndex The original index of the `changedItem` (before the change).
+     * @param newItemIndex The new index of the `changedItem` (after the change).
+     */
     onChange?(
         items: any,
         changedItem?: any,
@@ -45,7 +160,7 @@ interface ISharedData {
 export interface ISortableState { }
 
 export class Sortable extends React.Component<ISortableProps, ISortableState> {
-    private containerRef = createRef<HTMLElement>();
+    private containerRef = React.createRef<HTMLElement>();
 
     private eventsRegistered: boolean = false;
 
@@ -68,9 +183,9 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     private get visualizationCssClasses(): IVisualizationCssClasses {
         const defaultCssClasses = {
-            top: "top",
-            bottom: "bottom",
-            target: "target",
+            top: "above-drop-target",
+            bottom: "below-drop-target",
+            target: "drop-target",
         };
 
         const customCssProps = this.props.visualizationCssClasses || {};
@@ -245,8 +360,6 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
     private onItemDropped(event: any): void {
         event.preventDefault();
         event.stopPropagation();
-
-        console.log("SSC onItemDropped", Sortable.draggedElement);
 
         if (
             Sortable.draggedElement &&
