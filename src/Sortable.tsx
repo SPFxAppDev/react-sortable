@@ -198,10 +198,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
     };
 
     private get items(): Element[] {
-        const items = (this.containerRef.current as HTMLElement).querySelectorAll(
-            "[draggable='true']"
-        );
-
+        const items = (this.containerRef.current as HTMLElement).children;
         return Array.from<Element>(items);
     }
 
