@@ -74,6 +74,12 @@ export interface IVisualizationCssClasses {
  * Properties for the `Sortable` component.
  */
 export interface ISortableProps {
+
+    /**
+     * The list name. This is important if using sharedListProps
+     */
+    name?: string;
+
     /**
      * The HTML tag to use for the container element.
      *
@@ -148,6 +154,8 @@ export interface ISortableProps {
         oldItemIndex?: number,
         newItemIndex?: number
     ): void;
+
+    // children: any;
 }
 
 interface ISharedData {
@@ -495,7 +503,15 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         let newIndex = [...this.items].indexOf(target);
 
+        if (this.mouseMovesDown) {
+            newIndex += 1;
+        }
+
         if (oldIndex === newIndex) {
+            return;
+        }
+
+        if (!(newIndex < this.items.length)) {
             return;
         }
 
@@ -510,6 +526,8 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         } else {
             target.insertAdjacentElement("beforebegin", this.items[oldIndex]);
         }
+
+
 
         if (originalItemData.items && typeof this.props.onChange === "function") {
             originalItemData.items.splice(oldIndex, 1);

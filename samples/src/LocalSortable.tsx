@@ -1,0 +1,1 @@
+// export { Sortable as default } from '@spfxappdev/sortable';
