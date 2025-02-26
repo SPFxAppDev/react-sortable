@@ -74,6 +74,12 @@ export interface IVisualizationCssClasses {
  * Properties for the `Sortable` component.
  */
 export interface ISortableProps {
+
+    /**
+     * The list name. This is important if using sharedListProps
+     */
+    name?: string;
+
     /**
      * The HTML tag to use for the container element.
      *
@@ -148,6 +154,8 @@ export interface ISortableProps {
         oldItemIndex?: number,
         newItemIndex?: number
     ): void;
+
+    // children: any;
 }
 
 interface ISharedData {
@@ -155,6 +163,8 @@ interface ISharedData {
     sharedListProps?: ISortableSharedListProps[];
     item?: any;
     items?: any;
+    sortableInstanceId: string;
+    sortableName: string;
 }
 
 export interface ISortableState { }
@@ -181,6 +191,16 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     private mouseMovesDown: boolean = false;
 
+    private instanceId: string = "";
+
+    private get sortableName(): string {
+        if (typeof this.props.name === "string" && this.props.name.trim().length > 0) {
+            return this.props.name;
+        }
+
+        return `${this.instanceId}-${(new Date()).getTime()}`;
+    }
+
     private get visualizationCssClasses(): IVisualizationCssClasses {
         const defaultCssClasses = {
             top: "above-drop-target",
@@ -204,6 +224,9 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     public constructor(props: ISortableProps) {
         super(props);
+        this.instanceId = `sortableid-${Math.random()
+            .toString(36)
+            .substring(2, 15)}`;
         this.onItemDragStart = this.onItemDragStart.bind(this);
         this.onItemDropped = this.onItemDropped.bind(this);
         this.onItemDragEnter = this.onItemDragEnter.bind(this);
@@ -300,13 +323,22 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
     public render(): JSX.Element {
         const Container: any = this.props.tag;
         return (
-            <Container {...this.props.containerProps} ref={this.containerRef}>
+            <Container
+                {...this.props.containerProps}
+                ref={this.containerRef}
+                data-sortableid={this.instanceId}
+                draggable="false"
+            >
                 {this.props.children}
             </Container>
         );
     }
 
     private onItemDragStart(event: any): void {
+        if (Sortable.draggedElement !== undefined) {
+            return;
+        }
+
         const item = this.getRootDraggableElement(event.target);
         this.currentDragElement = item as HTMLElement;
         Sortable.draggedElement = item as HTMLElement;
@@ -343,6 +375,8 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
                 this.props.items && this.props.items[index]
                     ? this.props.items[index]
                     : undefined,
+            sortableInstanceId: this.instanceId,
+            sortableName: this.sortableName
         };
         event.dataTransfer.setData("text/plain", JSON.stringify(sharedData));
         Sortable.currentSharedData = sharedData;
@@ -370,38 +404,36 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         this.removeVisualElementsAndClasses();
         target.classList.remove(this.visualizationCssClasses.target);
 
+        //TODO: Use Sortable.currentSharedData instead? or only on error
         const eventData = event.dataTransfer.getData("text/plain");
 
         if (!eventData) {
             return;
         }
 
-        const originalItemData: ISharedData = JSON.parse(eventData) as ISharedData;
+        const sourceItemData: ISharedData = JSON.parse(eventData) as ISharedData;
 
         //Do nothing if the "dragged/dropped" element is not in same container
-        if (!originalItemData.sharedListProps && !this.currentDragElement) {
+        if (!sourceItemData.sharedListProps && !this.currentDragElement) {
             return;
         }
 
         const currentListProps = this.getFirstOrDefault(
-            originalItemData.sharedListProps as ISortableSharedListProps[],
+            sourceItemData.sharedListProps as ISortableSharedListProps[],
             (i: ISortableSharedListProps) => {
                 return (
-                    i.name ===
-                    this.getFirstOrDefault(
-                        this.props.sharedListProps as ISortableSharedListProps[],
-                        (i2: ISortableSharedListProps) => i2.name === i.name
-                    )?.name
+                    i.name === this.sortableName
                 );
             }
         );
 
-        const isSameList: boolean = (
-            this.containerRef.current as HTMLElement
-        ).contains(this.currentDragElement as Node);
+        const isSameList: boolean = this.instanceId === sourceItemData.sortableInstanceId;
+
+        const targetList = this.instanceId;
+        const sourceList = sourceItemData.sortableInstanceId;
 
         if (!isSameList && currentListProps) {
-            this.moveOrCloneToTarget(event, originalItemData, currentListProps);
+            this.moveOrCloneToTarget(event, sourceItemData, currentListProps);
             return;
         }
 
@@ -409,7 +441,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             return;
         }
 
-        this.sortItem(event, originalItemData);
+        this.sortItem(event, sourceItemData);
     }
 
     private moveOrCloneToTarget(
@@ -482,12 +514,12 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         this.afterMoveOrClone(originalItemData, newIndex);
     }
 
-    private sortItem(event: any, originalItemData: ISharedData): void {
+    private sortItem(event: any, sourceItemData: ISharedData): void {
         if (!this.props.sort) {
             return;
         }
 
-        const oldIndex = originalItemData.index;
+        const oldIndex = sourceItemData.index;
 
         //The element that is to be replaced and NOT the currently "dragged" element
         // const target = event.target;
@@ -495,15 +527,17 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
         let newIndex = [...this.items].indexOf(target);
 
+        if (this.mouseMovesDown) {
+            newIndex += 1;
+        }
+
         if (oldIndex === newIndex) {
             return;
         }
 
-        // if (newIndex < oldIndex) {
-        //   target.insertAdjacentElement("beforebegin", this.items[oldIndex]);
-        // } else {
-        //   target.insertAdjacentElement("afterend", this.items[oldIndex]);
-        // }
+        if (!(newIndex < this.items.length)) {
+            return;
+        }
 
         if (this.mouseMovesDown) {
             target.insertAdjacentElement("afterend", this.items[oldIndex]);
@@ -511,12 +545,12 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             target.insertAdjacentElement("beforebegin", this.items[oldIndex]);
         }
 
-        if (originalItemData.items && typeof this.props.onChange === "function") {
-            originalItemData.items.splice(oldIndex, 1);
-            originalItemData.items.splice(newIndex, 0, originalItemData.item);
+        if (sourceItemData.items && typeof this.props.onChange === "function") {
+            sourceItemData.items.splice(oldIndex, 1);
+            sourceItemData.items.splice(newIndex, 0, sourceItemData.item);
             this.props.onChange(
-                originalItemData.items,
-                originalItemData.item,
+                sourceItemData.items,
+                sourceItemData.item,
                 oldIndex,
                 newIndex
             );
@@ -544,7 +578,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
         this.props.onChange(
             newItems,
             originalItemData.item,
-            originalItemData.index,
+            -1,
             itemIndex
         );
     }
@@ -590,6 +624,7 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
 
     private addVisualElementsAndClasses(event: any): void {
         this.removeVisualElementsAndClasses();
+        //TODO: Add Styles, if moving to target list as well....
         if (!this.props.sort) {
             return;
         }
@@ -602,18 +637,12 @@ export class Sortable extends React.Component<ISortableProps, ISortableState> {
             Sortable.currentSharedData.sharedListProps as ISortableSharedListProps[],
             (i: ISortableSharedListProps) => {
                 return (
-                    i.name ===
-                    this.getFirstOrDefault(
-                        this.props.sharedListProps as ISortableSharedListProps[],
-                        (i2: ISortableSharedListProps) => i2.name === i.name
-                    )?.name
+                    i.name === this.sortableName
                 );
             }
         );
 
-        const isSameList: boolean = (
-            this.containerRef.current as HTMLElement
-        ).contains(this.currentDragElement as Node);
+        const isSameList: boolean = this.instanceId === Sortable.currentSharedData.sortableInstanceId;
 
         if (!isSameList && !currentListProps) {
             return;

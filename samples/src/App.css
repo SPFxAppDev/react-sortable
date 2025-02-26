@@ -1,0 +1,104 @@
+.App {
+  /* text-align: center; */
+  background-color: #282c34;
+  min-height: 100vh;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  /* align-items: center;
+  justify-content: center; */
+  font-size: calc(10px + 2vmin);
+  color: white;
+  margin: 5px auto;
+  max-width: 1200px;
+  padding: 0 20px;
+  gap: 10px;
+}
+
+/* Example CSS (You MUST provide your own CSS) */
+.list-item {
+  padding: 10px;
+  border: 1px solid #ccc;
+  margin-bottom: 5px;
+  background-color: #f9f9f9;
+  color: #000;
+}
+
+.drag-handle {
+  cursor: grab;
+  margin-right: 5px;
+}
+/*Visualisation classes */
+
+.drop-target.above-drop-target,
+.sortable-visual-target.sortable-visual-above {
+  border-top: 2px solid red;
+}
+
+.drop-target.below-drop-target,
+.sortable-visual-target.sortable-visual-below {
+  border-bottom: 2px solid red;
+}
+
+.text-h2 {
+  font-size: 2.125rem;
+  font-weight: 400;
+  line-height: 2.5rem;
+  letter-spacing: .00735em;
+}
+
+.shared-container {
+  display: flex;
+  gap: 16px;
+  flex-direction: row;
+}
+
+.shared-container > div {
+  flex-basis: 49%;
+}
+
+.list-item[draggable="true"] {
+  cursor: grab;
+}
+
+.list-item[draggable="false"] {
+  cursor: no-drop;
+  background-color: #aeaeae;
+}
+
+.empty {
+  padding: 10px;
+  border: 2px dotted #aeaeae;
+  margin-bottom: 5px;
+  background-color: transparent;
+  color: #aeaeae;
+  text-align: center;
+}
+
+p {
+  font-size: 1rem;
+  line-height: 1.2rem;
+  letter-spacing: .00735em;
+}
