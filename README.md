@@ -4,6 +4,16 @@
 
 A lightweight and customizable React sortable list component.  This component allows you to create sortable lists where users can drag and drop items within a single list (sort), or move items between multiple lists.  It's designed to be flexible and give you full control over the behavior and appearance.  This package does **not** include any CSS, giving you complete freedom to style it as you wish.
 
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Usage Example](#usage-example)
+- [API Reference (Props)](#api-reference-props)
+   * [`ISortableSharedListProps`](#isortablesharedlistprops)
+   * [`IVisualizationCssClasses`](#ivisualizationcssclasses)
+- [Styling](#styling)
+- [Samples/Demo](#samplesdemo)
+- [Contributing](#contributing)
+
 ## Key Features
 
 *   **Single and Multiple List Sorting:**  Sort items within a single list or move/copy them between connected lists.
@@ -197,6 +207,12 @@ enum SharedListMode {
 You are responsible for providing the CSS for your sortable lists.  This gives you maximum flexibility.  You **must** define styles for the visual feedback classes if you use them (e.g., `above-drop-target`, `below-drop-target`, `drop-target` or your custom names if you provided alternative class names in `visualizationCssClasses`).
 
 The example above shows basic styling using borders.  You can use any CSS techniques you like (e.g., background colors, borders) to create the desired visual effect (on target element).
+
+## Samples/Demo
+
+In the [samples](./samples) folder you can find some examples and run them locally (see [Readme](./samples/README.md), how to run locally).
+
+Additionally you can find samples on [codesandbox](https://codesandbox.io/p/sandbox/sortable-examples-5sgrqq)
 
 ## Contributing
 
